@@ -100,7 +100,7 @@ export default function AddTaskModal({ visible, onClose, onSave }: AddTaskModalP
 
         {/* Keyboard Avoiding Container */}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.keyboardContainer}
           pointerEvents="box-none"
         >

@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { Task, DayHistory, UserProfile, ImportanceLevel, DailyXpLog } from '../types';
-// import * as Notifications from 'expo-notifications';
+import * as Notifications from 'expo-notifications';
 import { Alert } from 'react-native';
 import { 
   DEFAULT_AVATAR_URL,
@@ -19,15 +19,13 @@ import {
 } from '@/services/database';
 
 // Set up the foreground notification behavior
-// Notifications.setNotificationHandler({
-//   handleNotification: async () => ({
-//     shouldShowAlert: true,
-//     shouldPlaySound: true,
-//     shouldSetBadge: false,
-//     shouldShowBanner: true,
-//     shouldShowList: true,
-//   }),
-// });
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export interface AppNotification {
   id: string;
@@ -200,19 +198,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Request system notification permissions on mount
   useEffect(() => {
     async function requestPermissions() {
-      // try {
-      //   const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      //   let finalStatus = existingStatus;
-      //   if (existingStatus !== 'granted') {
-      //     const { status } = await Notifications.requestPermissionsAsync();
-      //     finalStatus = status;
-      //   }
-      //   if (finalStatus !== 'granted') {
-      //     console.log('Permission for notifications not granted');
-      //   }
-      // } catch (err) {
-      //   console.log('Error requesting notification permissions:', err);
-      // }
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+          console.log('Permission for notifications not granted');
+        }
+      } catch (err) {
+        console.log('Error requesting notification permissions:', err);
+      }
     }
     requestPermissions();
   }, []);

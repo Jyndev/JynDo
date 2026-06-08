@@ -2,7 +2,7 @@
   "expo": {
     "name": "JynDo",
     "slug": "jyndo",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "jyndo",
@@ -24,6 +24,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0F1D",
+          "image": "./assets/images/transparent.png",
+          "imageWidth": 10
+        }
+      ],
       "expo-font",
       "expo-web-browser",
       "expo-sqlite"

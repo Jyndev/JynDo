@@ -35,8 +35,8 @@ sudo pacman -Syu git openjdk17-src base-devel wget unzip android-udev nodejs npm
 Descarga el código fuente directamente desde tu repositorio de GitHub e ingresa a la carpeta raíz de la aplicación:
 
 ```bash
-git clone <URL_DE_TU_REPOSITORIO_GITHUB>
-cd prueba_app_movil
+git clone https://github.com/Jyndev/JynDo.git
+cd jyndo
 
 ```
 
