@@ -1,7 +1,13 @@
 import * as SQLite from 'expo-sqlite';
-import { Task, ImportanceLevel } from '../types';
+import { Task, ImportanceLevel, TaskType } from '../types';
 
 export const DEFAULT_AVATAR_URL = 'https://cdn-icons-png.flaticon.com/512/847/847969.png';
+
+export function getLocalDateString(date: Date = new Date()): string {
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+  return localDate.toISOString().split('T')[0];
+}
 
 const DB_NAME = 'antigravity_tasks_v2.db';
 let dbInstance: SQLite.SQLiteDatabase | null = null;
@@ -45,7 +51,10 @@ export async function initializeDatabase(): Promise<void> {
       descripcion TEXT,
       importancia TEXT CHECK(importancia IN ('poca', 'interesante', 'importante')),
       estado TEXT CHECK(estado IN ('pendiente', 'completada', 'pospuesta', 'incumplida')) DEFAULT 'pendiente',
-      fecha_registro TEXT NOT NULL
+      fecha_registro TEXT NOT NULL,
+      tipo TEXT CHECK(tipo IN ('unica', 'recurrente', 'fecha_limite')) DEFAULT 'unica',
+      dias_recurrentes TEXT,
+      fecha_limite TEXT
     );
 
     CREATE TABLE IF NOT EXISTS historial_dias (
@@ -63,6 +72,17 @@ export async function initializeDatabase(): Promise<void> {
       fecha_registro TEXT NOT NULL
     );
   `);
+
+  // Migrate existing schema if necessary (for users who already had the table created without the new columns)
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(tareas)');
+  const hasTipo = columns.some(col => col.name === 'tipo');
+  if (!hasTipo) {
+    await db.execAsync(`
+      ALTER TABLE tareas ADD COLUMN tipo TEXT CHECK(tipo IN ('unica', 'recurrente', 'fecha_limite')) DEFAULT 'unica';
+      ALTER TABLE tareas ADD COLUMN dias_recurrentes TEXT;
+      ALTER TABLE tareas ADD COLUMN fecha_limite TEXT;
+    `);
+  }
 
   // Seed default user if not exists
   const defaultUser = await db.getFirstAsync<{ id: number }>('SELECT id FROM usuarios WHERE id = 1');
@@ -107,27 +127,56 @@ export async function actualizarTemaUsuario(isDarkMode: boolean, primaryColor: s
 }
 
 // Task Operations
-export async function crearTarea(titulo: string, descripcion: string, importancia: ImportanceLevel): Promise<number> {
+export async function crearTarea(
+  titulo: string,
+  descripcion: string,
+  importancia: ImportanceLevel,
+  tipo: TaskType = 'unica',
+  diasRecurrentes?: number[],
+  fechaLimite?: string
+): Promise<number> {
   const db = getDB();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
+  const diasRecurrentesStr = diasRecurrentes ? JSON.stringify(diasRecurrentes) : null;
   const result = await db.runAsync(
-    'INSERT INTO tareas (titulo, descripcion, importancia, estado, fecha_registro) VALUES (?, ?, ?, ?, ?)',
-    [titulo, descripcion, mapImportanceToDB(importancia), 'pendiente', todayStr]
+    'INSERT INTO tareas (titulo, descripcion, importancia, estado, fecha_registro, tipo, dias_recurrentes, fecha_limite) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      titulo,
+      descripcion,
+      mapImportanceToDB(importancia),
+      'pendiente',
+      todayStr,
+      tipo,
+      diasRecurrentesStr,
+      fechaLimite || null
+    ]
   );
   return result.lastInsertRowId;
 }
 
 export async function obtenerTareasHoy(filtroEstado: 'Todas' | 'Pendientes' | 'Completadas'): Promise<Task[]> {
   const db = getDB();
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   
-  let query = 'SELECT * FROM tareas WHERE fecha_registro = ?';
-  const params: any[] = [todayStr];
+  let query = `
+    SELECT * FROM tareas 
+    WHERE fecha_registro = ?
+       OR (tipo = 'fecha_limite' AND fecha_registro <= ? AND fecha_limite >= ? AND (estado = 'pendiente' OR fecha_limite = ?))
+  `;
+  const params: any[] = [todayStr, todayStr, todayStr, todayStr];
   
   if (filtroEstado === 'Pendientes') {
-    query += " AND estado = 'pendiente'";
+    query = `
+      SELECT * FROM (
+        ${query}
+      ) WHERE estado = 'pendiente'
+    `;
   } else if (filtroEstado === 'Completadas') {
-    query += " AND estado = 'completada'";
+    query = `
+      SELECT * FROM (
+        ${query}
+      ) WHERE estado = 'completada'
+    `;
   }
   
   // Sort: pending tasks first, then by priority weight descending (importante -> interesante -> poca)
@@ -142,18 +191,34 @@ export async function obtenerTareasHoy(filtroEstado: 'Todas' | 'Pendientes' | 'C
     importancia: string;
     estado: string;
     fecha_registro: string;
+    tipo?: string;
+    dias_recurrentes?: string | null;
+    fecha_limite?: string | null;
   }>(query, params);
   
   return rows.map(row => {
     const level = mapImportanceToTS(row.importancia);
     const xpValue = level === 'Importante' ? 100 : level === 'Interesante' ? 50 : 30;
+    
+    let diasRecurrentes: number[] | undefined;
+    if (row.dias_recurrentes) {
+      try {
+        diasRecurrentes = JSON.parse(row.dias_recurrentes);
+      } catch (e) {
+        console.error("Error parsing dias_recurrentes JSON:", e);
+      }
+    }
+
     return {
       id: row.id.toString(),
       title: row.titulo,
       description: row.descripcion || '',
       level,
       completed: row.estado === 'completada',
-      xpValue
+      xpValue,
+      tipo: (row.tipo as TaskType) || 'unica',
+      dias_recurrentes: diasRecurrentes,
+      fecha_limite: row.fecha_limite || undefined
     };
   });
 }
@@ -247,4 +312,82 @@ export async function marcarNotificacionesComoLeidas(): Promise<void> {
 export async function limpiarNotificaciones(): Promise<void> {
   const db = getDB();
   await db.runAsync('DELETE FROM notificaciones');
+}
+
+export async function obtenerTareasRecurrentes(): Promise<Task[]> {
+  const db = getDB();
+  const rows = await db.getAllAsync<{
+    id: number;
+    titulo: string;
+    description: string | null;
+    descripcion: string | null;
+    importancia: string;
+    estado: string;
+    fecha_registro: string;
+    tipo?: string;
+    dias_recurrentes?: string | null;
+    fecha_limite?: string | null;
+  }>("SELECT * FROM tareas WHERE tipo = 'recurrente'");
+
+  return rows.map(row => {
+    const level = mapImportanceToTS(row.importancia);
+    const xpValue = level === 'Importante' ? 100 : level === 'Interesante' ? 50 : 30;
+    
+    let diasRecurrentes: number[] | undefined;
+    if (row.dias_recurrentes) {
+      try {
+        diasRecurrentes = JSON.parse(row.dias_recurrentes);
+      } catch (e) {
+        console.error("Error parsing dias_recurrentes JSON:", e);
+      }
+    }
+
+    return {
+      id: row.id.toString(),
+      title: row.titulo,
+      description: row.descripcion || row.description || '',
+      level,
+      completed: row.estado === 'completada',
+      xpValue,
+      tipo: 'recurrente',
+      dias_recurrentes: diasRecurrentes,
+      fecha_limite: row.fecha_limite || undefined
+    };
+  });
+}
+
+export async function obtenerTareasFuturas(todayStr: string): Promise<Task[]> {
+  const db = getDB();
+  const rows = await db.getAllAsync<{
+    id: number;
+    titulo: string;
+    description: string | null;
+    descripcion: string | null;
+    importancia: string;
+    estado: string;
+    fecha_registro: string;
+    tipo?: string;
+    dias_recurrentes?: string | null;
+    fecha_limite?: string | null;
+  }>(
+    "SELECT * FROM tareas WHERE tipo = 'fecha_limite' AND fecha_limite > ? AND estado = 'pendiente' ORDER BY fecha_limite ASC",
+    [todayStr]
+  );
+
+  return rows.map(row => {
+    const level = mapImportanceToTS(row.importancia);
+    const xpValue = level === 'Importante' ? 100 : level === 'Interesante' ? 50 : 30;
+    
+    return {
+      id: row.id.toString(),
+      title: row.titulo,
+      description: row.descripcion || row.description || '',
+      level,
+      completed: row.estado === 'completada',
+      xpValue,
+      tipo: 'fecha_limite',
+      dias_recurrentes: undefined,
+      fecha_limite: row.fecha_limite || undefined
+    };
+  });
 }

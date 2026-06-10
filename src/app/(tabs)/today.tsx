@@ -18,7 +18,7 @@ type PriorityFilter = 'Todas' | ImportanceLevel;
 
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
-  const { todayTasks, toggleTask, pendingXp, processMidnightCrossover } = useApp();
+  const { todayTasks, toggleTask, pendingXp } = useApp();
   const { theme } = useTheme();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Todas');

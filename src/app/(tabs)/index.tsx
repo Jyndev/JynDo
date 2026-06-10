@@ -18,7 +18,8 @@ import {
   obtenerTareasHoy, 
   obtenerUsuario, 
   obtenerPuntosUltimosDias,
-  contarNotificacionesNoLeidas
+  contarNotificacionesNoLeidas,
+  getLocalDateString
 } from '@/services/database';
 
 const { width } = Dimensions.get('window');
@@ -85,7 +86,7 @@ export default function HomeScreen() {
           for (let i = 4; i >= 0; i--) {
             const d = new Date();
             d.setDate(today.getDate() - i);
-            const dateStr = d.toISOString().split('T')[0];
+            const dateStr = getLocalDateString(d);
             const dayLabel = i === 0 ? 'Hoy' : weekdays[d.getDay()];
             
             const foundLog = historiales.find(h => h.date === dateStr);

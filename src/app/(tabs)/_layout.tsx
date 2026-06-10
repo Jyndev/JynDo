@@ -10,7 +10,7 @@ import CustomText from '@/components/CustomText';
 
 export default function TabsLayout() {
   const [modalVisible, setModalVisible] = useState(false);
-  const { addTask } = useApp();
+  const { addTask, editModalVisible, taskToEdit, closeEditModal, updateTask } = useApp();
   const { theme } = useTheme();
 
   return (
@@ -137,9 +137,20 @@ export default function TabsLayout() {
       <AddTaskModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        onSave={(title, desc, level) => {
-          addTask(title, desc, level);
+        onSave={(title, desc, level, tipo, diasRecurrentes, fechaLimite) => {
+          addTask(title, desc, level, tipo, diasRecurrentes, fechaLimite);
           setModalVisible(false);
+        }}
+      />
+
+      <AddTaskModal
+        visible={editModalVisible}
+        onClose={closeEditModal}
+        taskToEdit={taskToEdit}
+        onSave={(title, desc, level, tipo, diasRecurrentes, fechaLimite) => {
+          if (taskToEdit) {
+            updateTask(taskToEdit.id, title, desc, level, tipo, diasRecurrentes, fechaLimite);
+          }
         }}
       />
 
