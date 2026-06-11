@@ -192,7 +192,7 @@ export default function AddTaskModal({ visible, onClose, onSave, taskToEdit }: A
 
         {/* Keyboard Avoiding Container */}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardContainer}
           pointerEvents="box-none"
         >
@@ -432,7 +432,6 @@ export default function AddTaskModal({ visible, onClose, onSave, taskToEdit }: A
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    justifyContent: 'flex-end',
   },
   backdrop: {
     position: 'absolute',
@@ -443,6 +442,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   keyboardContainer: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {
